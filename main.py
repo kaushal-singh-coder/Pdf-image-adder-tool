@@ -1,40 +1,48 @@
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import HTMLResponse, StreamingResponse
-from fastapi.templating import Jinja2Templates
-from fastapi import Request
-from reportlab.pdfgen import canvas
-from reportlab.lib.utils import ImageReader
 from pypdf import PdfReader, PdfWriter
+from reportlab.pdfgen import canvas
 from PIL import Image
 import io
-import os
 
 app = FastAPI()
-templates = Jinja2Templates(directory="templates")
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-IMAGE_PATH = os.path.join(BASE_DIR, "assets", "cover.png")
-
-def build_image_pdf(page_width, page_height):
-    packet = io.BytesIO()
-    c = canvas.Canvas(packet, pagesize=(page_width, page_height))
-    img = Image.open(IMAGE_PATH)
-    img_reader = ImageReader(img)
-    c.drawImage(img_reader, 0, 0, width=page_width, height=page_height, preserveAspectRatio=True, mask='auto')
-    c.showPage()
-    c.save()
-    packet.seek(0)
-    return PdfReader(packet)
-
-@app.get("/", response_class=HTMLResponse)
-async def home(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+@app.get("/")
+async def root():
+    return HTMLResponse('''
+        <form action="/process" method="post" enctype="multipart/form-data">
+            <input type="file" name="file" accept="application/pdf" required />
+            <button type="submit">Process</button>
+        </form>
+    ''')
 
 @app.post("/process")
-async def process_pdf(file: UploadFile = File(...)):
-    input_pdf_bytes = await file.read()
-    reader = PdfReader(io.BytesIO(input_pdf_bytes))
+async def process(file: UploadFile = File(...)):
+    reader = PdfReader(io.BytesIO(await file.read()))
     writer = PdfWriter()
+    
+    # Image logic (cover.png must be in root)
+    def add_img_page(w, h):
+        packet = io.BytesIO()
+        c = canvas.Canvas(packet, pagesize=(w, h))
+        c.drawImage("cover.png", 0, 0, width=w, height=h)
+        c.showPage()
+        c.save()
+        packet.seek(0)
+        return PdfReader(packet).pages[0]
+
+    w = float(reader.pages[0].mediabox.width)
+    h = float(reader.pages[0].mediabox.height)
+    img_page = add_img_page(w, h)
+    
+    writer.add_page(img_page)
+    for p in reader.pages: writer.add_page(p)
+    writer.add_page(img_page)
+    
+    out = io.BytesIO()
+    writer.write(out)
+    out.seek(0)
+    return StreamingResponse(out, media_type="application/pdf")    writer = PdfWriter()
 
     first_page = reader.pages[0]
     page_width = float(first_page.mediabox.width)
