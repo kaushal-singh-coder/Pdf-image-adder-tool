@@ -2,26 +2,35 @@ from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import HTMLResponse, StreamingResponse
 from pypdf import PdfReader, PdfWriter
 from reportlab.pdfgen import canvas
-from PIL import Image
 import io
 
 app = FastAPI()
 
+# HTML yahan string ke form mein hai, alag file ki zaroorat nahi
+HTML_CONTENT = """
+<!DOCTYPE html>
+<html>
+<head><title>PDF Image Adder</title></head>
+<body>
+  <h2>Upload PDF</h2>
+  <form action="/process" method="post" enctype="multipart/form-data">
+    <input type="file" name="file" accept="application/pdf" required />
+    <button type="submit">Process PDF</button>
+  </form>
+</body>
+</html>
+"""
+
 @app.get("/")
 async def root():
-    return HTMLResponse('''
-        <form action="/process" method="post" enctype="multipart/form-data">
-            <input type="file" name="file" accept="application/pdf" required />
-            <button type="submit">Process</button>
-        </form>
-    ''')
+    return HTMLResponse(content=HTML_CONTENT)
 
 @app.post("/process")
 async def process(file: UploadFile = File(...)):
+    # ... baki ka wahi logic jo pehle tha ...
     reader = PdfReader(io.BytesIO(await file.read()))
     writer = PdfWriter()
     
-    # Image logic (cover.png must be in root)
     def add_img_page(w, h):
         packet = io.BytesIO()
         c = canvas.Canvas(packet, pagesize=(w, h))
@@ -42,28 +51,4 @@ async def process(file: UploadFile = File(...)):
     out = io.BytesIO()
     writer.write(out)
     out.seek(0)
-    return StreamingResponse(out, media_type="application/pdf")    writer = PdfWriter()
-
-    first_page = reader.pages[0]
-    page_width = float(first_page.mediabox.width)
-    page_height = float(first_page.mediabox.height)
-
-    img_pdf = build_image_pdf(page_width, page_height)
-    img_page = img_pdf.pages[0]
-
-    writer.add_page(img_page)
-
-    for page in reader.pages:
-        writer.add_page(page)
-
-    writer.add_page(img_page)
-
-    output = io.BytesIO()
-    writer.write(output)
-    output.seek(0)
-
-    return StreamingResponse(
-        output,
-        media_type="application/pdf",
-        headers={"Content-Disposition": 'attachment; filename="processed.pdf"'}
-    )
+    return StreamingResponse(out, media_type="application/pdf")
