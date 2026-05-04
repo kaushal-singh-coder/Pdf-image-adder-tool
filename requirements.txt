@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+pypdf
+reportlab
+pillow
+python-multipart
+jinja2
